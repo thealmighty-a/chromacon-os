@@ -28,28 +28,43 @@ wherever you keep them.
 
 ## New machine
 
-```sh
-git clone https://github.com/thealmighty-a/chromacon-os ~/chromacon-os
-bash ~/chromacon-os/install.sh
-```
+Starting from a fresh `archinstall` + base Hyprland:
 
-That installs packages, Hyprland config, scripts and services -- a working
-(unthemed) ChromaCon desktop, no private infrastructure required.
+1. **Packages + engine** -- no private infrastructure needed for this step:
+   ```sh
+   sudo pacman -S --needed git cifs-utils
+   git clone https://github.com/thealmighty-a/chromacon-os ~/chromacon-os
+   bash ~/chromacon-os/install.sh
+   ```
+   This installs the full package list, Hyprland config, `cc-*` scripts and
+   services -- a working, unthemed desktop.
 
-Then bring in your own personal layer:
+2. **Mount your private store** (any CIFS/SMB share -- `cc-mount-store` is
+   generic and prompts for everything, nothing is hardcoded):
+   ```sh
+   cc-mount-store <host> <share> <mountpoint> [smb-username]
+   ```
 
-```sh
-cc-mount-store <host> <share> /cloud [smb-username]   # mount your private store (any CIFS/SMB share)
-cc-sync pull                                           # pull your themes, styles, dotfiles
-cc-theme-set <name>                                    # apply a theme
-```
+3. **Pull your personal layer**:
+   ```sh
+   cc-sync pull
+   ```
+   `cc-sync` (in `bin/`) is a thin wrapper that expects the real sync script
+   and your manifests at a path under that mounted store -- keep those there,
+   not in this repo. This step brings back themes, waybar/walker/hyprlock
+   styles, qutebrowser config, starship prompts, and anything else you keep
+   private.
 
-Reboot and pick "Hyprland (uwsm-managed)" at the login screen.
+4. **Apply a theme**:
+   ```sh
+   cc-theme-set <name>
+   ```
 
-`cc-mount-store` is generic -- point it at whatever server holds your own
-config. `cc-sync` (in `bin/`) is a thin wrapper that expects the real sync
-script and manifest at a path under your mounted store; keep that script and
-your personal manifests there, not in this repo.
+5. **Finish up**:
+   - `chmod +x ~/.local/bin/cc-*` if your sync step didn't preserve exec bits
+   - drop a `~/.config/hypr/cc/monitors.lua` / `local.lua` for any
+     machine-specific tweaks (both optional, never shipped here)
+   - reboot and pick "Hyprland (uwsm-managed)" at the login screen
 
 ## Design
 
