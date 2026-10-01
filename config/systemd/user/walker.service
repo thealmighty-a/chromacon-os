@@ -1,0 +1,13 @@
+[Unit]
+Description=Walker launcher service (ChromaCon)
+PartOf=graphical-session.target
+After=graphical-session.target elephant.service
+Wants=elephant.service
+
+[Service]
+ExecStart=/usr/bin/walker --gapplication-service
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

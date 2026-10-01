@@ -1,0 +1,13 @@
+[Unit]
+Description=Wallpaper from ~/.local/state/cc/background (ChromaCon)
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionPathExists=%h/.local/state/cc/background
+
+[Service]
+ExecStart=/usr/bin/swaybg -i %h/.local/state/cc/background -m fill
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

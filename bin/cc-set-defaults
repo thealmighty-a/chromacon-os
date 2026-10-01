@@ -1,0 +1,13 @@
+#!/bin/bash
+# Default applications for ChromaCon (xdg-mime). Safe to re-run.
+set_default() { local app="$1"; shift; [[ -f /usr/share/applications/$app || -f ~/.local/share/applications/$app ]] || return 0; for m in "$@"; do xdg-mime default "$app" "$m"; done; }
+set_default org.gnome.Evince.desktop application/pdf
+set_default org.pwmt.zathura-pdf-mupdf.desktop application/epub+zip application/oxps application/x-fictionbook
+set_default imv.desktop image/png image/jpeg image/gif image/webp image/bmp image/tiff image/avif image/heic image/svg+xml
+set_default mpv.desktop video/mp4 video/x-matroska video/webm video/quicktime video/x-msvideo audio/mpeg audio/flac audio/ogg audio/x-wav audio/mp4
+set_default org.gnome.Nautilus.desktop inode/directory
+set_default org.qutebrowser.qutebrowser.desktop x-scheme-handler/http x-scheme-handler/https text/html
+set_default org.gnome.FileRoller.desktop application/zip application/x-7z-compressed application/x-tar application/gzip application/x-xz application/zstd
+set_default nvim.desktop text/plain text/markdown
+command -v xdg-settings >/dev/null && [[ -f /usr/share/applications/org.qutebrowser.qutebrowser.desktop ]] && xdg-settings set default-web-browser org.qutebrowser.qutebrowser.desktop 2>/dev/null
+echo "default apps set"

@@ -1,0 +1,3 @@
+#!/bin/bash
+# Restart the walker service (picks up theme/config changes).
+systemctl --user restart walker.service

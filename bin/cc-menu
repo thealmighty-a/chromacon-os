@@ -1,0 +1,108 @@
+#!/bin/bash
+# ChromaCon menu (walker dmenu).
+#   cc-menu [root|style|capture|toggles|scripts|system|theme|background]
+# SUPER + ALT + SPACE opens the root menu; SUPER + ESCAPE opens System.
+
+menu() { printf '%s\n' "${@:2}" | cc-dmenu "$1"; }
+
+# Run a script in a floating terminal so its output stays visible.
+run() { cc-launch-float bash -c "$1"; }
+
+# Let walker close before grabbing the screen.
+capture() { sleep 0.3; "$@"; }
+
+style_manager() {
+  cc-launch-or-focus '^cc\.style-manager$' kitty --class=cc.style-manager -e chromacon-style-manager
+}
+
+theme_menu() {
+  local theme
+  theme=$(cc-theme-list --plain | cc-dmenu "Theme") || return
+  [[ -n $theme ]] && cc-theme-set "$theme"
+}
+
+style_menu() {
+  case $(menu "Style" "󰉼  Style manager" "󰏘  Quick theme switch" "󰸉  Next background" "󰍜  Toggle bar") in
+    *"Style manager") style_manager ;;
+    *"Quick theme switch") theme_menu ;;
+    *"Next background") cc-bg next ;;
+    *"Toggle bar") cc-toggle bar ;;
+  esac
+}
+
+capture_menu() {
+  case $(menu "Capture" "󰹑  Screenshot (region)" "󰍹  Screenshot (screen)" "󰏫  Screenshot + annotate" \
+    "󰻃  Record screen (start/stop)" "󰩭  Record region (start/stop)" "󰈊  Color picker") in
+    *"Screenshot (region)") capture cc-screenshot ;;
+    *"Screenshot (screen)") capture cc-screenshot screen ;;
+    *"annotate") capture cc-screenshot edit ;;
+    *"Record screen"*) capture cc-screenrecord ;;
+    *"Record region"*) capture cc-screenrecord region ;;
+    *"Color picker") capture hyprpicker -a ;;
+  esac
+}
+
+toggles_menu() {
+  case $(menu "Toggles" "󱄄  Nightlight" "󰒲  Idle lock" "󰂛  Do not disturb" "󰍜  Top bar") in
+    *Nightlight) cc-toggle nightlight ;;
+    *"Idle lock") cc-toggle idle ;;
+    *"Do not disturb") cc-toggle dnd ;;
+    *"Top bar") cc-toggle bar ;;
+  esac
+}
+
+scripts_menu() {
+  case $(menu "Scripts" \
+    "󰅧  Sync: push this machine to the NAS" \
+    "󰅢  Sync: pull from the NAS" \
+    "󰈈  Sync: preview push" \
+    "󰈈  Sync: preview pull" \
+    "󰆓  Apps: save installed apps to the list" \
+    "󰏔  Apps: install everything on the list" \
+    "󰚰  Update system" \
+    "󰍂  Install login screen theme" \
+    "󰑓  Restart bar + launcher") in
+    *"push this machine"*) run 'cc-sync push && notify-send -u low "cc-sync" "Pushed to the NAS"' ;;
+    *"pull from the NAS"*) run 'cc-sync pull && notify-send -u low "cc-sync" "Pulled from the NAS"' ;;
+    *"preview push") run 'cc-sync push --dry-run' ;;
+    *"preview pull") run 'cc-sync pull --dry-run' ;;
+    *"save installed apps"*) run 'cc-save-packages' ;;
+    *"install everything"*) run 'cc-install-packages' ;;
+    *"Update system") run 'cc-update' ;;
+    *"login screen theme") run 'cc-sddm-install' ;;
+    *"Restart bar + launcher") cc-restart-waybar; cc-restart-walker ;;
+  esac
+}
+
+system_menu() {
+  case $(menu "System" "󰌾  Lock" "󰒲  Suspend" "󰍃  Log out" "󰜉  Restart" "󰐥  Shut down") in
+    *Lock) cc-lock ;;
+    *Suspend) systemctl suspend ;;
+    *"Log out") uwsm stop ;;
+    *Restart) systemctl reboot ;;
+    *"Shut down") systemctl poweroff ;;
+  esac
+}
+
+root_menu() {
+  case $(menu "CC" "󰀻  Apps" "󰉼  Style" "󰄀  Capture" "󰔡  Toggles" "󰆍  Scripts" "󰌌  Keybindings" "󰐥  System") in
+    *Apps) walker ;;
+    *Style) style_menu ;;
+    *Capture) capture_menu ;;
+    *Toggles) toggles_menu ;;
+    *Scripts) scripts_menu ;;
+    *Keybindings) cc-keybinds ;;
+    *System) system_menu ;;
+  esac
+}
+
+case "${1:-root}" in
+  style) style_menu ;;
+  capture) capture_menu ;;
+  toggles) toggles_menu ;;
+  scripts) scripts_menu ;;
+  system) system_menu ;;
+  theme) theme_menu ;;
+  background) cc-bg next ;;
+  *) root_menu ;;
+esac

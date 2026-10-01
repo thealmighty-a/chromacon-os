@@ -1,0 +1,21 @@
+#!/bin/bash
+# Screenshot to ~/Pictures/Screenshots and the clipboard.
+#   cc-screenshot          select a region
+#   cc-screenshot screen   the focused monitor
+#   cc-screenshot edit     select a region and annotate it in satty
+dir="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
+mkdir -p "$dir"
+file="$dir/$(date +%Y-%m-%d_%H-%M-%S).png"
+if [[ ${1:-} == screen ]]; then
+  output=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
+  grim -o "$output" "$file" || exit 1
+elif [[ ${1:-} == edit ]]; then
+  region=$(slurp) || exit 0
+  grim -g "$region" - | satty --filename - --output-filename "$file" --copy-command wl-copy --early-exit
+  exit 0
+else
+  region=$(slurp) || exit 0
+  grim -g "$region" "$file" || exit 1
+fi
+wl-copy <"$file"
+notify-send -u low -i "$file" "Screenshot saved" "$(basename "$file") (copied)"

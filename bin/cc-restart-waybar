@@ -1,0 +1,3 @@
+#!/bin/bash
+# Restart waybar (reloads config.jsonc + style.css).
+systemctl --user restart waybar.service

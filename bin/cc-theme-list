@@ -1,0 +1,40 @@
+#!/bin/bash
+# List installed ChromaCon themes (current one marked with *; --plain for bare names).
+# Themes may be organized one level deep into group folders
+# (~/.config/cc/themes/<group>/<name>/): a folder counts as a theme if it has
+# at least one regular file directly inside it (not just subdirectories) —
+# a pure group folder holds only further theme folders and no loose files of
+# its own. This matches chromacon-style-manager's own discovery, and doesn't
+# require every theme to ship a specific marker file (some don't).
+current=$(cat ~/.local/state/cc/theme.name 2>/dev/null)
+plain=0
+[[ ${1:-} == --plain ]] && plain=1
+
+print_theme() {
+  local name="$1"
+  if [[ $plain == 1 ]]; then echo "$name"
+  elif [[ $name == "$current" ]]; then echo "* $name"
+  else echo "  $name"; fi
+}
+
+has_direct_file() {
+  local f
+  for f in "$1"*; do
+    [[ -f $f ]] && return 0
+  done
+  return 1
+}
+
+for dir in ~/.config/cc/themes/*/; do
+  [[ -d $dir ]] || continue
+  name=$(basename "$dir")
+  if has_direct_file "$dir"; then
+    print_theme "$name"
+    continue
+  fi
+  for child in "$dir"*/; do
+    [[ -d $child ]] || continue
+    has_direct_file "$child" || continue
+    print_theme "$(basename "$child")"
+  done
+done

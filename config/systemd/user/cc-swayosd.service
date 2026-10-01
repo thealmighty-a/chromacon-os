@@ -1,0 +1,13 @@
+[Unit]
+Description=swayosd volume/brightness popups, themed by cc-theme-set (ChromaCon)
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionPathExists=/usr/bin/swayosd-server
+
+[Service]
+ExecStart=/usr/bin/swayosd-server --style %h/.config/swayosd/style.css
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

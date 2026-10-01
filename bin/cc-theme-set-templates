@@ -1,0 +1,107 @@
+#!/bin/bash
+# Render ChromaCon templates into the staged theme (~/.local/state/cc/next-theme).
+# Called by cc-theme-set and by theme-manager. Derives colors.toml from
+# kitty.conf/alacritty.toml when the theme lacks one, then renders every
+# ~/.config/cc/templates/*.tpl the theme doesn't ship itself.
+
+set -uo pipefail
+
+TEMPLATES_PATH="$HOME/.config/cc/templates"
+NEXT_THEME_PATH="${1:-$HOME/.local/state/cc/next-theme}"
+
+# Rendered even when the theme ships its own copy: these are ChromaCon-shaped
+# files a theme can't know about.
+ALWAYS_RENDER=(hypr-colors.lua mako.conf)
+
+[[ -d $NEXT_THEME_PATH ]] || { echo "cc-theme-set-templates: no staged theme at $NEXT_THEME_PATH" >&2; exit 1; }
+
+# Build colors.toml from a kitty.conf or alacritty.toml for themes without one.
+colors_from_kitty() {
+  awk '
+    $1 ~ /^(background|foreground|cursor|selection_background|selection_foreground|color[0-9]+)$/ && $2 ~ /^#/ {
+      printf "%s = \"%s\"\n", $1, $2
+    }' "$1"
+}
+
+colors_from_alacritty() {
+  awk '
+    /^\[/ { section = $0; next }
+    /=/ {
+      key = $1; value = $0
+      sub(/^[^=]*=[ \t]*/, "", value)
+      if (!match(value, /^["\047]?(#|0x)[0-9A-Fa-f]{6}/)) next
+      value = "#" substr(value, RLENGTH - 5, 6)
+      split("black red green yellow blue magenta cyan white", names, " ")
+      if (section ~ /colors\.primary\]/ && (key == "background" || key == "foreground")) printf "%s = \"%s\"\n", key, value
+      for (i = 1; i <= 8; i++) {
+        if (key != names[i]) continue
+        if (section ~ /colors\.normal\]/) printf "color%d = \"%s\"\n", i - 1, value
+        if (section ~ /colors\.bright\]/) printf "color%d = \"%s\"\n", i + 7, value
+      }
+    }' "$1"
+}
+
+# One sed script that replaces every {{ key }}, {{ key_strip }} and {{ key_rgb }}.
+build_sed_script() {
+  local key value hex
+  while IFS=$'\t' read -r key value; do
+    [[ -n $key ]] || continue
+    printf 's|{{ *%s *}}|%s|g\n' "$key" "$value"
+    if [[ $value =~ ^#([0-9A-Fa-f]{6})([0-9A-Fa-f]{2})?$ ]]; then
+      hex="${BASH_REMATCH[1]}"
+      printf 's|{{ *%s_strip *}}|%s|g\n' "$key" "$hex"
+      printf 's|{{ *%s_rgb *}}|%d,%d,%d|g\n' "$key" "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
+    fi
+  done < <(cc-theme-color --file "$NEXT_THEME_PATH/colors.toml" --all)
+}
+
+render_templates() {
+  local sed_script tpl name out
+  [[ -d $TEMPLATES_PATH ]] || return 0
+  sed_script=$(mktemp)
+  build_sed_script >"$sed_script"
+
+  for tpl in "$TEMPLATES_PATH"/*.tpl; do
+    [[ -f $tpl ]] || continue
+    name=$(basename "$tpl" .tpl)
+    out="$NEXT_THEME_PATH/$name"
+    if [[ -e $out && " ${ALWAYS_RENDER[*]} " != *" $name "* ]]; then
+      continue # the theme ships its own
+    fi
+    sed -f "$sed_script" "$tpl" >"$out"
+    if grep -q '{{' "$out"; then
+      echo "cc-theme-set: unresolved placeholder(s) in $name: $(grep -o '{{[^}]*}}' "$out" | sort -u | tr '\n' ' ')" >&2
+    fi
+  done
+  rm -f "$sed_script"
+}
+
+if [[ ! -f $NEXT_THEME_PATH/colors.toml ]]; then
+  if [[ -f $NEXT_THEME_PATH/kitty.conf ]]; then
+    colors_from_kitty "$NEXT_THEME_PATH/kitty.conf" >"$NEXT_THEME_PATH/colors.toml"
+  elif [[ -f $NEXT_THEME_PATH/alacritty.toml ]]; then
+    colors_from_alacritty "$NEXT_THEME_PATH/alacritty.toml" >"$NEXT_THEME_PATH/colors.toml"
+  else
+    echo "cc-theme-set-templates: theme has no colors.toml, kitty.conf or alacritty.toml" >&2
+    exit 1
+  fi
+fi
+
+render_templates
+
+# The theme's notification shape (corners, padding, size, position, colors)
+# from its mako.ini, on top of the rendered mako.conf. Only top-level
+# appearance keys: never its font, [criteria] sections or click actions.
+if [[ -f $NEXT_THEME_PATH/mako.ini ]]; then
+  awk '
+    /^[[:space:]]*\[/ { exit }
+    /^(border-radius|border-size|padding|margin|outer-margin|width|height|max-icon-size|anchor|layer|default-timeout|text-color|border-color|background-color|progress-color)=/ { print }
+  ' "$NEXT_THEME_PATH/mako.ini" >>"$NEXT_THEME_PATH/mako.conf"
+fi
+
+# Just the colors of the theme's walker.css, for the cc launcher style to load
+# before its base rules (GTK needs colors defined before use).
+[[ -f $NEXT_THEME_PATH/walker.css ]] && grep '^@define-color' "$NEXT_THEME_PATH/walker.css" >"$NEXT_THEME_PATH/walker-colors.css"
+
+# The theme's Hyprland look (rounding, gaps, blur, shadows, animations...).
+cc-theme-hyprland "$NEXT_THEME_PATH" || echo "cc-theme-set-templates: could not translate hyprland.conf" >&2

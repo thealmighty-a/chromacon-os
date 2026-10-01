@@ -1,0 +1,22 @@
+#!/bin/bash
+# Volume/brightness with an on-screen popup (swayosd) when it's running,
+# plain wpctl/brightnessctl otherwise.
+#   cc-osd volume up|down|mute [step]   cc-osd mic mute   cc-osd brightness up|down [step]
+what="${1:-}"; action="${2:-}"; step="${3:-5}"
+# swayosd-client fails if the server never registered on D-Bus; fall through to wpctl/brightnessctl then.
+osd() { pgrep -x swayosd-server >/dev/null && command -v swayosd-client >/dev/null; }
+case "$what $action" in
+  "volume up")   osd && swayosd-client --output-volume "+$step" --max-volume 100 && exit
+                 exec wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ "$step%+" ;;
+  "volume down") osd && swayosd-client --output-volume "-$step" && exit
+                 exec wpctl set-volume @DEFAULT_AUDIO_SINK@ "$step%-" ;;
+  "volume mute") osd && swayosd-client --output-volume mute-toggle && exit
+                 exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle ;;
+  "mic mute")    osd && swayosd-client --input-volume mute-toggle && exit
+                 exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle ;;
+  "brightness up")   osd && swayosd-client --brightness "+$step" && exit
+                     exec brightnessctl -e4 -n2 set "$step%+" ;;
+  "brightness down") osd && swayosd-client --brightness "-$step" && exit
+                     exec brightnessctl -e4 -n2 set "$step%-" ;;
+  *) echo "Usage: cc-osd volume up|down|mute [step] | mic mute | brightness up|down [step]" >&2; exit 1 ;;
+esac

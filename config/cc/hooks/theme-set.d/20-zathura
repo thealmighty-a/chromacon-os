@@ -1,0 +1,14 @@
+#!/bin/bash
+# zathura (PDF) colors: ~/.config/zathura/theme, included by zathurarc.
+src=~/.local/state/cc/theme/zathurarc
+[[ -f $src ]] || exit 0
+mkdir -p ~/.config/zathura
+cp -f "$src" ~/.config/zathura/theme
+[[ -f ~/.config/zathura/zathurarc ]] || cat >~/.config/zathura/zathurarc <<'CONF'
+# ChromaCon zathura. Colors + font come from ./theme (cc-theme-set); Ctrl+R recolors pages.
+include theme
+set selection-clipboard clipboard
+set adjust-open width
+set guioptions sv
+CONF
+exit 0

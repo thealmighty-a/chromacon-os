@@ -1,0 +1,12 @@
+#!/bin/bash
+# Run user hooks: cc-hook <event> [args...]
+# Every file in ~/.config/cc/hooks/<event>.d/ (except *.sample) runs with the args.
+event="${1:-}"; shift || true
+[[ -n $event ]] || { echo "Usage: cc-hook <event> [args...]" >&2; exit 1; }
+dir="$HOME/.config/cc/hooks/$event.d"
+[[ -d $dir ]] || exit 0
+for hook in "$dir"/*; do
+  [[ -f $hook && $hook != *.sample ]] || continue
+  bash "$hook" "$@" || echo "cc-hook: $(basename "$hook") failed" >&2
+done
+exit 0

@@ -1,0 +1,20 @@
+#!/bin/bash
+# mpv OSD (and uosc, if installed) colors: ~/.config/mpv/theme.conf.
+command -v mpv >/dev/null || exit 0
+strip() { cc-theme-color "$1" | tr -d '#'; }
+bg=$(strip background); fg=$(strip foreground)
+mkdir -p ~/.config/mpv/script-opts
+cat >~/.config/mpv/theme.conf <<CONF
+# Written by ~/.config/cc/hooks/theme-set.d/40-mpv on every theme change.
+osd-color=#${fg}
+osd-border-color=#${bg}
+osd-back-color=#CC${bg}
+CONF
+conf=~/.config/mpv/mpv.conf
+[[ -f $conf ]] && ! grep -q '^include=~~/theme.conf' "$conf" && printf '\ninclude=~~/theme.conf\n' >>"$conf"
+if [[ -d /usr/share/mpv/scripts/uosc || -d ~/.config/mpv/scripts/uosc ]]; then
+  uosc=~/.config/mpv/script-opts/uosc.conf; touch "$uosc"
+  color="foreground=${fg},foreground_text=${bg},background=${bg},background_text=${fg},window_border=$(strip muted),curtain=${bg},success=$(strip green),error=$(strip red),match=$(strip bright_blue),heatmap=$(strip bright_cyan)"
+  if grep -q '^color=' "$uosc"; then sed -i "s|^color=.*|color=${color}|" "$uosc"; else echo "color=${color}" >>"$uosc"; fi
+fi
+exit 0

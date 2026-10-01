@@ -1,0 +1,15 @@
+#!/bin/bash
+# qutebrowser colors: theme.py (sourced last by config.py), live reload.
+src=~/.local/state/cc/theme/qutebrowser-theme.py
+dst=~/.config/qutebrowser
+[[ -f $src ]] || exit 0
+mkdir -p "$dst"
+cp -f "$src" "$dst/theme.py"
+if pgrep -x qutebrowser >/dev/null || pgrep -f 'python.*qutebrowser' >/dev/null; then
+  (
+    if ! timeout 5 qutebrowser ':config-source' >/tmp/cc-qutebrowser-reload.log 2>&1; then
+      command -v notify-send >/dev/null && notify-send -u normal "ChromaCon theme" "qutebrowser didn't pick up the new colors live — see /tmp/cc-qutebrowser-reload.log"
+    fi
+  ) &
+fi
+exit 0

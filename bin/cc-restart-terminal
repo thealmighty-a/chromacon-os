@@ -1,0 +1,4 @@
+#!/bin/bash
+# kitty re-reads its config (and the theme include) on SIGUSR1.
+pkill -SIGUSR1 -x kitty 2>/dev/null
+exit 0

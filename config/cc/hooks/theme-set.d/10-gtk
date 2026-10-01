@@ -1,0 +1,24 @@
+#!/bin/bash
+# GTK 3/4 colors (theme gtk.css), dark/light preference and icon theme.
+theme=~/.local/state/cc/theme
+for v in 3.0 4.0; do
+  mkdir -p ~/.config/gtk-$v
+  printf '/* ChromaCon: colors follow the current theme (cc-theme-set). */\n@import url("file://%s/gtk.css");\n' "$theme" >~/.config/gtk-$v/gtk.css
+done
+command -v gsettings >/dev/null || exit 0
+mode=$(cc-theme-color mode 2>/dev/null || echo dark)
+if [[ $mode == light ]]; then
+  gsettings set org.gnome.desktop.interface color-scheme prefer-light
+  gsettings set org.gnome.desktop.interface gtk-theme Adwaita
+else
+  gsettings set org.gnome.desktop.interface color-scheme prefer-dark
+  gsettings set org.gnome.desktop.interface gtk-theme Adwaita-dark
+fi
+# Icon theme named by the theme, when it's installed.
+if [[ -f $theme/icons.theme ]]; then
+  icons=$(tr -d '[:space:]' <"$theme/icons.theme")
+  if [[ -n $icons && ( -d /usr/share/icons/$icons || -d ~/.local/share/icons/$icons ) ]]; then
+    gsettings set org.gnome.desktop.interface icon-theme "$icons"
+  fi
+fi
+exit 0

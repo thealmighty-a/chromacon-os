@@ -1,0 +1,2 @@
+#!/bin/bash
+cat ~/.local/state/cc/theme.name 2>/dev/null

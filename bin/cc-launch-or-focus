@@ -1,0 +1,10 @@
+#!/bin/bash
+# Focus a window whose class matches <regex>, else run <command>.
+#   cc-launch-or-focus <class-regex> <command...>
+match="$1"; shift
+address=$(hyprctl clients -j | jq -r --arg m "$match" 'first(.[] | select(.class | test($m; "i"))) | .address' 2>/dev/null)
+if [[ -n $address && $address != null ]]; then
+  hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null
+else
+  setsid -f uwsm-app -- "$@" >/dev/null 2>&1
+fi

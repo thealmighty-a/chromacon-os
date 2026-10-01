@@ -1,0 +1,26 @@
+#!/bin/bash
+# cc-toggle bar|idle|nightlight|dnd
+case "${1:-}" in
+  bar)
+    pkill -SIGUSR1 -x waybar
+    ;;
+  idle)
+    if systemctl --user is-active -q hypridle.service; then
+      systemctl --user stop hypridle.service && notify-send -u low "Idle lock" "Off"
+    else
+      systemctl --user start hypridle.service && notify-send -u low "Idle lock" "On"
+    fi
+    ;;
+  nightlight)
+    if pgrep -x hyprsunset >/dev/null; then
+      pkill -x hyprsunset && notify-send -u low "Nightlight" "Off"
+    else
+      setsid -f uwsm-app -- hyprsunset -t 4000 >/dev/null 2>&1 && notify-send -u low "Nightlight" "On"
+    fi
+    ;;
+  dnd)
+    makoctl mode -t do-not-disturb >/dev/null
+    if makoctl mode | grep -qx do-not-disturb; then notify-send -u critical -t 1500 "Notifications" "Silenced"; fi
+    ;;
+  *) echo "Usage: cc-toggle bar|idle|nightlight|dnd" >&2; exit 1 ;;
+esac

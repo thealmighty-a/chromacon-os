@@ -1,0 +1,3 @@
+#!/bin/bash
+# Config sync with the NAS (shared script, also used by the laptop).
+exec bash "/cloud/Resources/Linux/Omarchy_Quattro/Sync_Things/Scripts_and_Helpers/cc-sync.sh" "$@"

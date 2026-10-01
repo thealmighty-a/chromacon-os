@@ -1,0 +1,5 @@
+$color = rgb({{ background_rgb }})
+$inner_color = rgb({{ background_rgb }})
+$outer_color = rgb({{ accent_rgb }})
+$font_color = rgb({{ foreground_rgb }})
+$check_color = rgb({{ green_rgb }})

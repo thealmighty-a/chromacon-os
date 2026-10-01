@@ -1,0 +1,3 @@
+#!/bin/bash
+# Pick one line from stdin with walker. cc-dmenu "<prompt>"
+exec walker --dmenu --width 320 --minheight 1 --maxheight 640 -p "${1:-Select}…" 2>/dev/null

@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""superfile launcher that stops pins from disappearing.
+
+superfile deletes every pinned folder that doesn't exist when it starts
+(e.g. /cloud or /media not mounted yet, NAS asleep) and saves the shorter
+list, so NAS pins silently vanish. This wrapper:
+  1. wakes the NAS automounts before superfile starts,
+  2. restores remembered pins whose folders exist again,
+  3. after superfile exits, remembers the current pins plus any that were
+     only unreachable (pins you deliberately unpinned are forgotten).
+The memory lives in ~/.local/share/superfile/pinned.keep.json (per machine,
+like pinned.json itself; neither is synced).
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+DATA = Path.home() / ".local/share/superfile"
+PINS = DATA / "pinned.json"
+KEEP = DATA / "pinned.keep.json"
+MOUNTS = ("/cloud", "/media")
+
+
+def load(path: Path) -> list:
+    try:
+        data = json.loads(path.read_text())
+        return [d for d in data if isinstance(d, dict) and d.get("location")] if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def save(path: Path, dirs: list) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dirs))
+
+
+def unique(dirs: list) -> list:
+    seen, out = set(), []
+    for d in dirs:
+        if d["location"] not in seen:
+            seen.add(d["location"])
+            out.append(d)
+    return out
+
+
+def exists(location: str) -> bool:
+    return os.path.isdir(location)
+
+
+def main() -> int:
+    # Touching the mount points triggers the systemd automounts (bounded, in
+    # case the NAS is unreachable).
+    for mount in MOUNTS:
+        try:
+            subprocess.run(["ls", mount], capture_output=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
+    before = load(PINS)
+    kept = load(KEEP)
+    have = {d["location"] for d in before}
+    restored = [d for d in kept if d["location"] not in have and exists(d["location"])]
+    if restored:
+        save(PINS, before + restored)
+        before = before + restored
+
+    try:
+        code = subprocess.call(["spf", *sys.argv[1:]])
+    except FileNotFoundError:
+        print("superfile (spf) is not installed", file=sys.stderr)
+        return 127
+
+    after = load(PINS)
+    after_locations = {d["location"] for d in after}
+    # Pins missing now but whose folder is also missing were dropped by
+    # superfile (unreachable), not unpinned by you: keep remembering them.
+    unreachable = [d for d in kept + before if d["location"] not in after_locations and not exists(d["location"])]
+    save(KEEP, unique(after + unreachable))
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

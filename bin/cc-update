@@ -1,0 +1,4 @@
+#!/bin/bash
+# Full system update (repo + AUR).
+yay -Syu
+pkill -SIGRTMIN+7 waybar 2>/dev/null

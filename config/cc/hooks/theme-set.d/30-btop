@@ -1,0 +1,14 @@
+#!/bin/bash
+# btop colors: ~/.config/btop/themes/cc.theme, selected in btop.conf.
+src=~/.local/state/cc/theme/btop.theme
+[[ -f $src ]] || exit 0
+mkdir -p ~/.config/btop/themes
+cp -f "$src" ~/.config/btop/themes/cc.theme
+conf=~/.config/btop/btop.conf
+if [[ -f $conf ]] && grep -q '^color_theme' "$conf"; then
+  sed -i 's|^color_theme.*|color_theme = "cc"|' "$conf"
+else
+  echo 'color_theme = "cc"' >>"$conf"
+fi
+pkill -SIGUSR2 -x btop 2>/dev/null
+exit 0

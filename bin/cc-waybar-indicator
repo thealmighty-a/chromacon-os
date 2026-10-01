@@ -1,0 +1,15 @@
+#!/bin/bash
+# Waybar status indicators (JSON): cc-waybar-indicator idle|notification-silencing|screen-recording
+emit() { printf '{"text": "%s", "tooltip": "%s", "class": "%s"}\n' "$1" "$2" "$3"; }
+case "${1:-}" in
+  idle)
+    if systemctl --user is-active -q hypridle.service; then emit "" "" ""
+    else emit "󱫖" "Idle lock off" "active"; fi ;;
+  notification-silencing)
+    if makoctl mode 2>/dev/null | grep -qx do-not-disturb; then emit "󰂛" "Notifications silenced" "active"
+    else emit "" "" ""; fi ;;
+  screen-recording)
+    if pgrep -x wf-recorder >/dev/null || pgrep -f gpu-screen-recorder >/dev/null; then emit "󰻂" "Recording" "active"
+    else emit "" "" ""; fi ;;
+  *) emit "" "" "" ;;
+esac

@@ -1,0 +1,3 @@
+#!/bin/bash
+# Advance to the current theme's next background (theme-manager calls this).
+exec cc-bg next

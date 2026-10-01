@@ -1,0 +1,7 @@
+#!/bin/bash
+# nvim colorscheme: ~/.config/nvim/lua/plugins/cc-theme.lua (LazyVim plugin spec from the theme's neovim.lua).
+src=~/.local/state/cc/theme/neovim.lua
+[[ -f $src ]] || exit 0
+mkdir -p ~/.config/nvim/lua/plugins
+cp -f "$src" ~/.config/nvim/lua/plugins/cc-theme.lua
+exit 0

@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""Add this machine's explicitly installed packages to the ChromaCon package list.
+
+  cc-save-packages            add anything missing to cc-packages.txt
+  cc-save-packages --dry-run  only show what would be added
+
+Repo packages go to [repo], AUR/foreign ones to [aur], each under a dated
+"# added" comment. Packages matching [ignore] globs (kernel, firmware,
+drivers, ...) and anything already listed (including -git/-bin variants and
+"a|b" alternatives) are skipped. Nothing is ever removed from the list; the
+report shows listed packages that aren't installed here so you can prune by hand.
+"""
+import datetime
+import fnmatch
+import socket
+import subprocess
+import sys
+from pathlib import Path
+
+LIST = Path("/cloud/Resources/Linux/Omarchy_Quattro/Sync_Things/Scripts_and_Helpers/cc-packages.txt")
+
+
+def pacman(*args: str) -> set[str]:
+    out = subprocess.run(["pacman", *args], capture_output=True, text=True).stdout
+    return set(out.split())
+
+
+def base_name(name: str) -> str:
+    for suffix in ("-git", "-bin"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def main() -> int:
+    dry_run = "--dry-run" in sys.argv
+    if not LIST.is_file():
+        print(f"package list not found: {LIST} (is /cloud mounted?)", file=sys.stderr)
+        return 1
+    lines = LIST.read_text().splitlines()
+
+    section, listed, ignore = "", set(), []
+    for line in lines:
+        text = line.split("#", 1)[0].strip()
+        if not text:
+            continue
+        if text.startswith("[") and text.endswith("]"):
+            section = text[1:-1]
+            continue
+        for word in text.split():
+            if section == "ignore":
+                ignore.append(word)
+            else:
+                listed.update(word.split("|"))
+    listed_bases = {base_name(n) for n in listed}
+
+    def covered(name: str) -> bool:
+        return name in listed or base_name(name) in listed_bases or any(fnmatch.fnmatch(name, pat) for pat in ignore)
+
+    repo_new = sorted(n for n in pacman("-Qqen") if not covered(n))
+    aur_new = sorted(n for n in pacman("-Qqem") if not covered(n))
+    installed = pacman("-Qq")
+    installed_bases = {base_name(n) for n in installed}
+    not_here = sorted(
+        entry for entry in {w for l in lines for w in l.split("#", 1)[0].split()} - set()
+        if not entry.startswith("[")
+        and not any(fnmatch.fnmatch(entry, pat) for pat in ignore)
+        and entry not in ignore
+        and not any(a in installed or base_name(a) in installed_bases for a in entry.split("|"))
+    )
+
+    host = socket.gethostname()
+    print(f"cc-save-packages on {host}")
+    print(f"  new repo packages: {' '.join(repo_new) or 'none'}")
+    print(f"  new AUR packages:  {' '.join(aur_new) or 'none'}")
+    if not_here:
+        print(f"  listed but not installed here (remove by hand if unwanted): {' '.join(not_here)}")
+    if dry_run or not (repo_new or aur_new):
+        print("  list unchanged" + (" (dry run)" if dry_run else ""))
+        return 0
+
+    stamp = f"# added {datetime.date.today()} on {host}"
+    out, section = [], ""
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            # Close the previous section with its additions before the next header.
+            if section == "repo" and repo_new:
+                while out and not out[-1].strip():
+                    out.pop()
+                out += [stamp, " ".join(repo_new), ""]
+            if section == "aur" and aur_new:
+                while out and not out[-1].strip():
+                    out.pop()
+                out += [stamp, *aur_new, ""]
+            section = stripped[1:-1]
+        out.append(line)
+    if section == "repo" and repo_new:
+        out += [stamp, " ".join(repo_new)]
+    if section == "aur" and aur_new:
+        out += [stamp, *aur_new]
+    LIST.write_text("\n".join(out).rstrip("\n") + "\n")
+    print(f"  written to {LIST}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

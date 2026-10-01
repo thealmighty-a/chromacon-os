@@ -1,0 +1,5 @@
+#!/bin/bash
+# Launch a TUI in its own kitty window: cc-launch-tui <command> [args...]
+[[ -n ${1:-} ]] || exit 1
+name=$(basename "$1")
+exec setsid -f uwsm-app -- kitty --class="cc.$name" -e "$@"

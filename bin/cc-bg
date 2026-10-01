@@ -1,0 +1,17 @@
+#!/bin/bash
+# (Re)start the wallpaper (cc-bg.service) from ~/.local/state/cc/background.
+#   cc-bg          restart swaybg on the current background
+#   cc-bg next     cycle to the theme's next background first
+link="$HOME/.local/state/cc/background"
+if [[ ${1:-} == next ]]; then
+  theme=$(cat ~/.local/state/cc/theme.name 2>/dev/null) || exit 1
+  mapfile -d '' -t bgs < <(find -L ~/.local/state/cc/theme/backgrounds/ -maxdepth 1 -type f \
+    \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.bmp' \) -print0 2>/dev/null | sort -z)
+  (( ${#bgs[@]} )) || exit 1
+  current=$(readlink "$link"); index=-1
+  for i in "${!bgs[@]}"; do [[ ${bgs[$i]} == "$current" ]] && index=$i; done
+  ln -nsf "${bgs[$(( (index + 1) % ${#bgs[@]} ))]}" "$link"
+fi
+[[ -e $link ]] || exit 0
+[[ ${2:-} == --no-restart ]] && exit 0
+systemctl --user restart cc-bg.service

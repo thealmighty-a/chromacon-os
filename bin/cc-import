@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""Convert Omarchy-flavoured waybar/walker styles and themes for ChromaCon.
+
+  cc-import waybar <style-dir>... [--dest DIR] [--group GROUP] [--force]
+  cc-import walker <theme-dir>... [--dest DIR] [--group GROUP] [--force]
+  cc-import theme  <theme-dir-or-git-url> [--name NAME] [--group GROUP] [--force]
+
+waybar -> ~/.config/waybar/themes/<name>/            (what chromacon-style-manager lists)
+walker -> ~/.config/walker/themes/<name>/
+theme  -> ~/.config/cc/themes/<name>/                (colour themes already work as-is;
+                                                       this just copies/clones them in)
+
+With --group GROUP, each import lands one level deeper instead, e.g.
+~/.config/waybar/themes/<GROUP>/<name>/ — chromacon-style-manager (and
+cc-theme-set/cc-theme-list, for the theme kind) treat a subfolder that isn't
+itself a style/theme as a collapsible group in the TUI.
+
+Names containing "omarchy" are renamed to "cc". Commands, module names and
+paths are rewritten (see REWRITES). Anything left that still mentions an
+omarchy command is reported so it can be fixed by hand.
+"""
+
+import argparse
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+HOME = Path.home()
+STATE = str(HOME / ".local/state/cc")
+
+# (regex, replacement) applied in order to every text file.
+REWRITES = [
+    # Theme colour imports / files from the current theme.
+    (r"""[^"'\s()]*omarchy/current/theme\.name""", f"{STATE}/theme.name"),
+    (r"""[^"'\s()]*omarchy/current/theme/""", f"{STATE}/theme/"),
+    (r"""[^"'\s()]*omarchy/current/background""", f"{STATE}/background"),
+    # Status indicators shipped with Omarchy.
+    (r"\$OMARCHY_PATH/default/waybar/indicators/([a-z-]+)\.sh", r"cc-waybar-indicator \1"),
+    # Logo module.
+    (r"<span font='omarchy'>[^<]*</span>", "CC"),
+    (r'"format":\s*"omarchy"', '"format": "CC"'),
+    (r"custom([/-])omarchy", r"custom\1cc"),
+    # Launchers.
+    (r"omarchy-launch-floating-terminal-with-presentation\s+omarchy-update\b", "cc-launch-float cc-update"),
+    (r"omarchy-launch-floating-terminal-with-presentation\s+omarchy-tz-select\b", "cc-launch-float cc-tz-select"),
+    (r"omarchy-launch-floating-terminal-with-presentation", "cc-launch-float"),
+    (r"omarchy-launch-or-focus-tui", "cc-launch-tui"),
+    (r"omarchy-launch-tui", "cc-launch-tui"),
+    (r"omarchy-launch-wifi", "cc-launch-tui nmtui"),
+    (r"omarchy-launch-bluetooth", "cc-launch-tui bluetui"),
+    (r"omarchy-launch-audio", "cc-launch-tui wiremix"),
+    (r"omarchy-launch-terminal", "uwsm-app -- kitty"),
+    (r"xdg-terminal-exec --app-id=com\.omarchy\.Wiremix -e wiremix", "cc-launch-tui wiremix"),
+    (r"(?:com|org)\.omarchy\.Wiremix", "Wiremix"),
+    (r"org\.omarchy\.terminal", "kitty"),
+    # Menus.
+    (r"omarchy-menu-tofi", "cc-menu"),
+    (r"omarchy-menu-themes", "cc-menu theme"),
+    (r"omarchy-menu(?![-\w])", "cc-menu"),
+    # Toggles, status, system.
+    (r"omarchy-toggle-idle", "cc-toggle idle"),
+    (r"omarchy-toggle-notification-silencing", "cc-toggle dnd"),
+    (r"omarchy-voxtype-(\w+)", r"cc-voxtype \1"),
+    (r"omarchy-update-available", "cc-update-available"),
+    (r"omarchy-cmd-screenrecord", "cc-screenrecord"),
+    (r"omarchy-capture-screenrecording", "cc-screenrecord"),
+    (r"[^\s\"']*omarchy-cmd-tzupdate", "true"),
+    (r"omarchy-tz-select", "cc-tz-select"),
+    (r"omarchy-update(?![-\w])", "cc-update"),
+    # Themes.
+    (r"omarchy-theme-current", "cc-theme-current"),
+    (r"omarchy-theme-list", "cc-theme-list --plain"),
+    (r"omarchy-theme-set", "cc-theme-set"),
+    (r"omarchy-theme-bg-next", "cc-bg next"),
+    (r"omarchy-restart-(\w+)", r"cc-restart-\1"),
+    # Walker.
+    (r"(?m)^additional_theme_location\s*=.*\n", ""),
+    (r'theme\s*=\s*"omarchy-default"', 'theme = "cc"'),
+    (r'theme\s*=\s*"omarchy-active"', 'theme = "cc-active"'),
+    # Visible text.
+    (r"Omarchy [Mm]enu", "CC Menu"),
+    (r"Omarchy update available", "Updates available"),
+    # Waybar styles used to live in ~/.config/waybar/styles.
+    (r"\.config/waybar/styles/", ".config/waybar/themes/"),
+]
+
+TEXT_SUFFIXES = {".jsonc", ".json", ".css", ".sh", ".py", ".toml", ".xml", ".conf", ".ini", ".rasi", ""}
+LEFTOVER = re.compile(r"omarchy-[a-z][\w-]*|OMARCHY_PATH")
+
+
+def cc_name(name: str) -> str:
+    return re.sub(r"omarchy", "cc", name, flags=re.IGNORECASE)
+
+
+def convert_text(text: str) -> str:
+    for pattern, repl in REWRITES:
+        text = re.sub(pattern, repl, text)
+    return text
+
+
+def convert_tree(src: Path, dest: Path, force: bool) -> list[str]:
+    if dest.exists():
+        if not force:
+            return [f"exists, skipped (use --force): {dest}"]
+        shutil.rmtree(dest)
+    shutil.copytree(src, dest, symlinks=False, ignore=shutil.ignore_patterns(".git", "*.zip"))
+    notes = []
+    for path in dest.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
+            continue
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        new = convert_text(text)
+        if new != text:
+            path.write_text(new)
+        if path.suffix in {".sh", ".py"}:
+            path.chmod(0o755)
+        for line_no, line in enumerate(new.splitlines(), 1):
+            if LEFTOVER.search(line) and not line.lstrip().startswith(("#", "//", "/*", "*")):
+                notes.append(f"{path.relative_to(dest.parent)}:{line_no}: {line.strip()[:110]}")
+    return notes
+
+
+def import_styles(kind: str, sources: list[str], dest_root: Path, group: str | None, force: bool) -> int:
+    marker = "config.jsonc" if kind == "waybar" else "style.css"
+    target_root = dest_root / group if group else dest_root
+    target_root.mkdir(parents=True, exist_ok=True)
+    imported, problems = 0, []
+    for source in sources:
+        src = Path(source).expanduser()
+        if not (src / marker).is_file() and not (kind == "waybar" and (src / "config").is_file()):
+            print(f"skip {src.name}: no {marker}")
+            continue
+        name = cc_name(src.name)
+        if name == "cc" and (target_root / "cc").exists() and not force:
+            print(f"skip {src.name}: would replace the ChromaCon default 'cc'")
+            continue
+        notes = convert_tree(src, target_root / name, force)
+        if notes and notes[0].startswith("exists"):
+            print(f"skip {src.name}: {notes[0]}")
+            continue
+        imported += 1
+        problems += notes
+        print(f"imported {src.name} -> {target_root / name}")
+    if problems:
+        print("\nStill referencing Omarchy commands (fix by hand if the module matters):")
+        for note in problems:
+            print("  " + note)
+    print(f"\n{imported} {kind} style(s) imported into {target_root}")
+    return 0
+
+
+def import_theme(source: str, name: str | None, group: str | None, force: bool) -> int:
+    themes = HOME / ".config/cc/themes"
+    theme_root = themes / group if group else themes
+    theme_root.mkdir(parents=True, exist_ok=True)
+    if re.match(r"^(https?://|git@)", source):
+        base = re.sub(r"\.git$", "", source.rstrip("/").split("/")[-1].split(":")[-1])
+        name = name or re.sub(r"^omarchy-|-theme$", "", base).lower()
+        dest = theme_root / name
+        if dest.exists():
+            if not force:
+                print(f"{dest} exists (use --force)")
+                return 1
+            shutil.rmtree(dest)
+        subprocess.run(["git", "clone", "--depth", "1", source, str(dest)], check=True)
+        shutil.rmtree(dest / ".git", ignore_errors=True)
+    else:
+        src = Path(source).expanduser()
+        name = name or re.sub(r"^omarchy-|-theme$", "", src.name).lower()
+        dest = theme_root / name
+        if dest.exists() and not force:
+            print(f"{dest} exists (use --force)")
+            return 1
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest, ignore=shutil.ignore_patterns(".git"))
+    has_palette = any((dest / f).is_file() for f in ("colors.toml", "kitty.conf", "alacritty.toml"))
+    print(f"theme '{name}' installed at {dest}")
+    if not has_palette:
+        print("warning: no colors.toml, kitty.conf or alacritty.toml; cc-theme-set can't derive colours")
+        return 1
+    print(f"apply it with: cc-theme-set {name}   (or pick it in chromacon-style-manager)")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="cc-import", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("kind", choices=["waybar", "walker", "theme"])
+    parser.add_argument("sources", nargs="+")
+    parser.add_argument("--dest")
+    parser.add_argument("--name")
+    parser.add_argument("--group", help="place the import one level deeper, under this group folder")
+    parser.add_argument("--force", action="store_true")
+    args = parser.parse_args()
+
+    if args.kind == "theme":
+        if len(args.sources) != 1:
+            parser.error("theme takes exactly one source")
+        return import_theme(args.sources[0], args.name, args.group, args.force)
+
+    default = HOME / (".config/waybar/themes" if args.kind == "waybar" else ".config/walker/themes")
+    return import_styles(
+        args.kind,
+        args.sources,
+        Path(args.dest).expanduser() if args.dest else default,
+        args.group,
+        args.force,
+    )
+
+
+if __name__ == "__main__":
+    sys.exit(main())

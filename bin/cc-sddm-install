@@ -1,0 +1,11 @@
+#!/bin/bash
+# Install the ChromaCon login screen (SDDM theme) and make it the active theme.
+# Source: ~/.config/cc/sddm/chromacon (synced). Needs sudo.
+set -euo pipefail
+src="$HOME/.config/cc/sddm/chromacon"
+[[ -f $src/Main.qml ]] || { echo "No SDDM theme at $src (run cc-sync pull?)" >&2; exit 1; }
+sudo rm -rf /usr/share/sddm/themes/chromacon
+sudo cp -r "$src" /usr/share/sddm/themes/chromacon
+sudo mkdir -p /etc/sddm.conf.d
+printf '[Theme]\nCurrent=chromacon\n' | sudo tee /etc/sddm.conf.d/10-chromacon.conf >/dev/null
+echo "ChromaCon login screen installed; it shows at the next logout/reboot."

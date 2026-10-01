@@ -1,0 +1,47 @@
+# ChromaCon package set: one list for every ChromaCon machine.
+# Installed by `cc-install-packages` (pacman --needed for [repo], yay for [aur]).
+# AUR lines may list alternatives: "walker-bin|walker" = skip if either is installed.
+
+[repo]
+# Session
+hyprland uwsm sddm xdg-desktop-portal-hyprland xdg-desktop-portal-gtk hyprpolkitagent
+waybar mako swaybg swayosd hyprlock hypridle hyprpicker hyprsunset python
+# Terminal, fonts, theming
+kitty starship ttf-jetbrains-mono-nerd noto-fonts noto-fonts-emoji gnome-themes-extra
+# Core tools
+git base-devel jq rsync cifs-utils networkmanager brightnessctl playerctl pamixer wiremix
+grim slurp wl-clipboard cliphist libnotify udiskie xdg-user-dirs pacman-contrib power-profiles-daemon
+bluez bluez-utils bluetui
+# CLI
+btop superfile neovim fzf ripgrep fd bat eza zoxide man-db tldr wget unzip zip 7zip
+# Apps
+firefox mpv imv zathura zathura-pdf-mupdf nautilus sushi file-roller gnome-calculator
+gnome-disk-utility satty wf-recorder libreoffice-fresh
+# added 2026-09-29 on ChromaConOS-HPPRODESK
+fastfetch gst-plugin-pipewire htop libpulse nano network-manager-applet opencode pipewire pipewire-alsa pipewire-jack pipewire-pulse qt5-wayland qt6-wayland vim wireplumber xdg-utils
+# added 2026-09-30 on ChromaConOS-dellxps13: fonts the waybar styles use, LazyVim deps
+ttf-cascadia-mono-nerd ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono woff2-font-awesome ttf-iosevka-nerd nodejs npm lazygit tree-sitter-cli
+# added 2026-09-30 on ChromaConOS-dellxps13
+iwd openssh tailscale
+
+[aur]
+yay-bin|yay
+elephant-all|elephant
+walker-bin|walker
+qutebrowser-git|qutebrowser
+claude-code
+yaru-icon-theme
+localsend-bin|localsend
+jellyfin-tui
+nchat-bin|nchat
+eilmeldung
+frogmouth
+
+[ignore]
+# Never added by cc-save-packages (globs allowed): kernel, boot, firmware and
+# drivers are per-machine; the rest are archinstall leftovers ChromaCon replaces.
+base linux linux-* *-ucode *firmware* mkinitcpio limine* grub efibootmgr os-prober
+btrfs-progs zram-generator sudo wpa_supplicant smartmontools
+intel-media-driver libva-* vulkan-* nvidia* xf86-video-* mesa lib32-*
+dunst wofi hyprpaper polkit-kde-agent dolphin
+*-debug

@@ -1,0 +1,4 @@
+#!/bin/bash
+# Run a command in a floating, centered kitty window: cc-launch-float <command...>
+[[ -n ${1:-} ]] || exit 1
+exec setsid -f uwsm-app -- kitty --class=cc.float -e bash -c '"$@"; echo; read -rsn1 -p "Press any key to close"' _ "$@"

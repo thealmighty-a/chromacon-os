@@ -1,0 +1,87 @@
+#!/bin/bash
+# Apply a ChromaCon theme.
+#   cc-theme-set <theme-name>
+#
+# Themes live in ~/.config/cc/themes/<name>/ (a colors.toml plus any per-app
+# files the theme ships: waybar.css, walker.css, kitty.conf, hyprlock.conf,
+# backgrounds/...), optionally nested one level under an organizational group
+# folder (~/.config/cc/themes/<group>/<name>/). The theme is staged in
+# ~/.local/state/cc/next-theme,
+# cc-theme-set-templates fills in missing per-app files, then it is swapped
+# into ~/.local/state/cc/theme/, the background advances, running apps reload
+# and `cc-hook theme-set <name>` runs. theme-manager follows the same steps.
+
+set -uo pipefail
+
+THEMES_PATH="$HOME/.config/cc/themes"
+STATE_PATH="$HOME/.local/state/cc"
+CURRENT_THEME_PATH="$STATE_PATH/theme"
+NEXT_THEME_PATH="$STATE_PATH/next-theme"
+LOCK="${XDG_RUNTIME_DIR:-/tmp}/cc-theme-set.lock"
+
+if [[ -z ${1:-} ]]; then
+  echo "Usage: cc-theme-set <theme-name>   (see cc-theme-list)" >&2
+  exit 1
+fi
+
+THEME_NAME=$(tr '[:upper:] ' '[:lower:]-' <<<"$1")
+
+if [[ $THEME_NAME == .* || $THEME_NAME == */* ]]; then
+  echo "Theme '$THEME_NAME' does not exist in $THEMES_PATH" >&2
+  exit 1
+fi
+
+THEME_DIR="$THEMES_PATH/$THEME_NAME"
+if [[ ! -d $THEME_DIR ]]; then
+  # Not directly under THEMES_PATH: it may be one level deep inside a group
+  # folder (THEMES_PATH/<group>/<name>/).
+  for group_dir in "$THEMES_PATH"/*/; do
+    [[ -d "$group_dir$THEME_NAME" ]] || continue
+    THEME_DIR="$group_dir$THEME_NAME"
+    break
+  done
+fi
+
+if [[ ! -d $THEME_DIR ]]; then
+  echo "Theme '$THEME_NAME' does not exist in $THEMES_PATH" >&2
+  exit 1
+fi
+
+exec 9>"$LOCK"
+flock 9
+
+mkdir -p "$STATE_PATH"
+rm -rf "$NEXT_THEME_PATH"
+mkdir -p "$NEXT_THEME_PATH"
+cp -r "$THEME_DIR/." "$NEXT_THEME_PATH/"
+
+if ! cc-theme-set-templates "$NEXT_THEME_PATH"; then
+  rm -rf "$NEXT_THEME_PATH"
+  exit 1
+fi
+
+rm -rf "$CURRENT_THEME_PATH"
+mv "$NEXT_THEME_PATH" "$CURRENT_THEME_PATH"
+
+previous_theme=$(cat "$STATE_PATH/theme.name" 2>/dev/null || true)
+echo "$THEME_NAME" >"$STATE_PATH/theme.name"
+# A new theme starts on its first background; the same theme cycles.
+[[ $previous_theme != "$THEME_NAME" ]] && rm -f "$STATE_PATH/background"
+
+flock -u 9
+
+if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+  cc-theme-bg-next || echo "cc-theme-set: theme has no backgrounds/, keeping the current wallpaper" >&2
+  cc-restart-hyprctl
+  cc-restart-waybar
+  cc-restart-mako
+  cc-restart-terminal
+  cc-restart-walker
+else
+  cc-bg next --no-restart >/dev/null 2>&1
+fi
+
+cc-hook theme-set "$THEME_NAME"
+
+command -v notify-send >/dev/null && notify-send -u low -t 2000 "Theme" "$THEME_NAME" 2>/dev/null
+exit 0

@@ -1,0 +1,5 @@
+#!/bin/bash
+# Prints an icon when package updates are waiting (needs checkupdates from pacman-contrib).
+command -v checkupdates >/dev/null || exit 0
+[[ -n $(checkupdates 2>/dev/null; yay -Qua 2>/dev/null) ]] && echo ""
+exit 0

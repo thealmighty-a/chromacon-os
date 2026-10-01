@@ -1,0 +1,4 @@
+#!/bin/bash
+# Pass-through to voxtype when installed; silent otherwise (waybar modules hide).
+command -v voxtype >/dev/null || exit 0
+exec voxtype "$@"

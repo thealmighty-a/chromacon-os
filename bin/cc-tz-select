@@ -1,0 +1,4 @@
+#!/bin/bash
+# Pick a timezone and set it (asks for sudo).
+tz=$(timedatectl list-timezones | cc-dmenu "Timezone") || exit 0
+[[ -n $tz ]] && sudo timedatectl set-timezone "$tz" && echo "Timezone set to $tz"

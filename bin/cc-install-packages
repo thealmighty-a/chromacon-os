@@ -1,0 +1,55 @@
+#!/bin/bash
+# Install the ChromaCon package set (cc-packages.txt on the NAS).
+#   cc-install-packages [list-file]
+set -uo pipefail
+LIST="${1:-/cloud/Resources/Linux/Omarchy_Quattro/Sync_Things/Scripts_and_Helpers/cc-packages.txt}"
+[[ -f $LIST ]] || { echo "No package list at $LIST" >&2; exit 1; }
+
+section=""; repo=(); aur=()
+while read -r line; do
+  line="${line%%#*}"; [[ -z ${line// } ]] && continue
+  case "$line" in
+    \[*\]) section="${line//[\[\] ]/}"; continue ;;
+  esac
+  for word in $line; do
+    [[ $section == repo ]] && repo+=("$word")
+    [[ $section == aur ]] && aur+=("$word")
+  done
+done <"$LIST"
+
+echo "== ${#repo[@]} repo packages"
+sudo pacman -S --needed --noconfirm "${repo[@]}" || { echo "pacman failed" >&2; exit 1; }
+
+if ! command -v yay >/dev/null; then
+  echo "== bootstrapping yay"
+  tmp=$(mktemp -d); git clone --depth 1 https://aur.archlinux.org/yay-bin.git "$tmp/yay-bin" &&
+    (cd "$tmp/yay-bin" && makepkg -si --noconfirm); rm -rf "$tmp"
+fi
+
+todo=()
+for entry in "${aur[@]}"; do
+  IFS='|' read -ra alts <<<"$entry"
+  have=""
+  for alt in "${alts[@]}"; do pacman -Qq "$alt" >/dev/null 2>&1 && have="$alt" && break; done
+  if [[ -z $have ]]; then
+    # also catch packages that merely provide the name (e.g. qutebrowser-git)
+    for alt in "${alts[@]}"; do pacman -Qqs "^${alt}(-git|-bin)?$" >/dev/null 2>&1 && have="$alt" && break; done
+  fi
+  [[ -n $have ]] && continue
+  todo+=("${alts[0]}")
+done
+if (( ${#todo[@]} )); then
+  echo "== AUR: ${todo[*]}"
+  failed=()
+  for pkg in "${todo[@]}"; do
+    yay -S --needed --noconfirm "$pkg" || failed+=("$pkg")
+  done
+  (( ${#failed[@]} )) && echo "!! AUR packages that failed: ${failed[*]}" >&2
+else
+  echo "== AUR: nothing to do"
+fi
+
+echo "== services"
+sudo systemctl enable --now bluetooth.service power-profiles-daemon.service 2>/dev/null || true
+xdg-user-dirs-update 2>/dev/null || true
+echo "== done"

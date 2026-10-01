@@ -1,0 +1,22 @@
+#!/bin/bash
+# Toggle screen recording (wf-recorder) to ~/Videos/Screenrecordings.
+#   cc-screenrecord          focused monitor
+#   cc-screenrecord region   select a region
+if pgrep -x wf-recorder >/dev/null; then
+  pkill -INT -x wf-recorder
+  notify-send -u low "Screen recording" "Saved to ~/Videos/Screenrecordings"
+  pkill -RTMIN+8 waybar
+  exit 0
+fi
+command -v wf-recorder >/dev/null || { notify-send "Screen recording" "wf-recorder is not installed"; exit 1; }
+dir="${XDG_VIDEOS_DIR:-$HOME/Videos}/Screenrecordings"; mkdir -p "$dir"
+file="$dir/$(date +%Y-%m-%d_%H-%M-%S).mp4"
+if [[ ${1:-} == region ]]; then
+  region=$(slurp) || exit 0
+  setsid -f wf-recorder -g "$region" -f "$file" >/dev/null 2>&1
+else
+  output=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
+  setsid -f wf-recorder -o "$output" -f "$file" >/dev/null 2>&1
+fi
+notify-send -u low "Screen recording" "Recording… press Alt+Print again to stop"
+sleep 0.5; pkill -RTMIN+8 waybar

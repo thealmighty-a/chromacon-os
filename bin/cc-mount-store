@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Mount a CIFS/SMB share as your private ChromaCon config store, so that
+# `cc-sync pull` has somewhere to pull your themes/dotfiles from.
+#
+# Nothing here is specific to any one server: it just prompts for whatever
+# you point it at and writes the matching fstab entry + credentials file.
+# Re-run it any time to add another mountpoint (e.g. a media share).
+#
+#   cc-mount-store <host> <share> <mountpoint> [smb-username]
+#
+# Example: cc-mount-store 192.168.1.129 Cloud /cloud hallofjustice
+
+set -euo pipefail
+
+[[ $# -ge 3 ]] || { echo "Usage: cc-mount-store <host> <share> <mountpoint> [smb-username]" >&2; exit 1; }
+HOST=$1 SHARE=$2 MOUNT=$3 SMBUSER=${4:-}
+CRED="/etc/samba/credentials-$(echo "$HOST-$SHARE" | tr -c 'A-Za-z0-9' '-')"
+
+[[ $EUID -ne 0 ]] || { echo "Run as your normal user (it uses sudo when needed)." >&2; exit 1; }
+
+if grep -q "//$HOST/$SHARE " /etc/fstab 2>/dev/null; then
+  echo "already in fstab: //$HOST/$SHARE -> $MOUNT"
+else
+  if [[ -z $SMBUSER ]]; then
+    read -rp "SMB username on $HOST: " SMBUSER
+  fi
+  read -rsp "SMB password: " SMBPASS; echo
+  sudo mkdir -p /etc/samba
+  printf 'username=%s\npassword=%s\n' "$SMBUSER" "$SMBPASS" | sudo tee "$CRED" >/dev/null
+  sudo chmod 600 "$CRED"
+
+  opts="credentials=$CRED,uid=$(id -u),gid=$(id -g),iocharset=utf8,vers=3.0,_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=600"
+  sudo cp /etc/fstab "/etc/fstab.bak-$(date +%s)"
+  sudo mkdir -p "$MOUNT"
+  printf '//%s/%s %s cifs %s 0 0\n' "$HOST" "$SHARE" "$MOUNT" "$opts" | sudo tee -a /etc/fstab >/dev/null
+  sudo systemctl daemon-reload
+fi
+
+mountpoint -q "$MOUNT" || sudo mount "$MOUNT"
+echo "mounted //$HOST/$SHARE at $MOUNT"
