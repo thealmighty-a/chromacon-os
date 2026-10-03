@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Lock timing profiles: cc-lock-profile [name|list]
+# Profiles live in ~/.config/cc/lock-profiles/<name>.conf:
+#   lock_after=<seconds>        0 = never lock (hypridle stopped)
+#   screen_off_after=<seconds>  screen off this many seconds after the lock timeout
+set -u
+PROFILES="$HOME/.config/cc/lock-profiles"
+HYPRIDLE="$HOME/.config/hypr/hypridle.conf"
+STATE_FILE="$HOME/.local/state/cc/lock-profile"
+
+case ${1:-list} in
+  list)
+    for f in "$PROFILES"/*.conf; do [[ -f $f ]] && basename "$f" .conf; done
+    exit 0 ;;
+esac
+
+name=$1
+conf="$PROFILES/$name.conf"
+[[ -f $conf ]] || { echo "No lock profile '$name' in $PROFILES" >&2; exit 1; }
+lock_after=$(sed -n 's/^lock_after=//p' "$conf")
+off_after=$(sed -n 's/^screen_off_after=//p' "$conf")
+[[ $lock_after =~ ^[0-9]+$ && $off_after =~ ^[0-9]+$ ]] || { echo "Bad numbers in $conf" >&2; exit 1; }
+
+if (( lock_after == 0 )); then
+  systemctl --user stop hypridle.service
+else
+  python3 - "$HYPRIDLE" "$lock_after" "$((lock_after + off_after))" <<'PY'
+import re, sys
+path, lock, off = sys.argv[1], sys.argv[2], sys.argv[3]
+text = open(path).read()
+# The first listener is the lock, the second is screen-off; rewrite their timeouts in order.
+timeouts = iter([lock, off])
+text = re.sub(r"(listener\s*\{\s*timeout\s*=\s*)\d+", lambda m: m.group(1) + next(timeouts), text)
+open(path, "w").write(text)
+PY
+  # Only restart when idle lock is on; cc-toggle idle off must stay off.
+  systemctl --user is-active -q hypridle.service && systemctl --user restart hypridle.service
+fi
+
+mkdir -p "$(dirname "$STATE_FILE")"
+echo "$name" > "$STATE_FILE"
+command -v notify-send >/dev/null && notify-send -u low "Lock profile" "$name"

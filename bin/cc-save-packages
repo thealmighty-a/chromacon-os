@@ -17,7 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-LIST = Path("/cloud/Resources/Linux/Omarchy_Quattro/Sync_Things/Scripts_and_Helpers/cc-packages.txt")
+LIST = Path("/cloud/Resources/Linux/ChromaCon/Sync_Things/Scripts_and_Helpers/cc-packages.txt")
 
 
 def pacman(*args: str) -> set[str]:

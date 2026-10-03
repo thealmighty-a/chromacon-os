@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# ChromaCon health check: cc-doctor [--quiet]
+# Prints ok / warn / FAIL lines. Exit status 1 when anything FAILs.
+quiet=0; [[ ${1:-} == --quiet ]] && quiet=1
+fails=0; warns=0
+
+ok()   { (( quiet )) || printf '  ok    %s\n' "$1"; }
+warn() { warns=$((warns + 1)); printf '  warn  %s\n' "$1"; }
+fail() { fails=$((fails + 1)); printf '  FAIL  %s\n' "$1"; }
+section() { (( quiet )) || printf '\n%s\n' "$1"; }
+
+section "Hyprland"
+errors=$(hyprctl configerrors 2>/dev/null)
+if [[ -n $errors ]]; then fail "config errors: $(head -1 <<<"$errors")"; else ok "config loads clean"; fi
+if grep -q 'hyprlock-layout.conf' ~/.config/hypr/hyprlock.conf 2>/dev/null; then
+  ok "hyprlock host sources the layout"
+else
+  fail "hyprlock.conf no longer sources hyprlock-layout.conf (idle lock would show a black screen)"
+fi
+
+section "Services"
+for unit in waybar mako hypridle elephant walker cc-bg cc-swayosd hyprpolkitagent cliphist; do
+  systemctl --user cat "$unit.service" >/dev/null 2>&1 || continue
+  if systemctl --user is-active -q "$unit.service"; then ok "$unit running"
+  elif [[ $unit == hypridle ]]; then ok "idle lock off (cc-toggle idle turns it on)"
+  else warn "$unit not running"; fi
+done
+[[ -f ~/.config/systemd/user/waybar.service.d/cc-scripts.conf ]] \
+  && ok "waybar starts with the theme-script sync" || warn "waybar theme-script sync hook missing"
+systemctl --user is-enabled -q cc-hypr-check.path 2>/dev/null \
+  && ok "config check on save is on" || warn "cc-hypr-check.path not enabled"
+
+section "Waybar"
+if [[ -L ~/.config/waybar/config.jsonc && -e ~/.config/waybar/config.jsonc ]]; then
+  ok "live config links to $(basename "$(dirname "$(readlink -f ~/.config/waybar/config.jsonc)")")/"
+else
+  warn "live waybar config is missing or a broken link"
+fi
+while IFS= read -r link; do fail "broken link in ~/.config/waybar: $link"; done \
+  < <(find ~/.config/waybar -maxdepth 1 -xtype l 2>/dev/null)
+# Module commands in the live config that don't resolve on this machine
+if [[ -f ~/.config/waybar/config.jsonc ]]; then
+  missing=$(python3 - ~/.config/waybar/config.jsonc <<'PY'
+import json, os, re, shutil, sys
+text = open(sys.argv[1]).read()
+text = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("//"))
+try:
+    cfg = json.loads(text)
+except ValueError:
+    sys.exit(0)
+def walk(node):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k in ("exec", "on-click", "on-click-right", "on-click-middle") and isinstance(v, str):
+                yield v
+            else:
+                yield from walk(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from walk(v)
+seen = set()
+for cmd in walk(cfg):
+    if any(op in cmd for op in ("&&", "||", "$(", "|", ";")):
+        continue
+    first = cmd.split()[0] if cmd.split() else ""
+    if not first or first in seen:
+        continue
+    seen.add(first)
+    path = os.path.expandvars(os.path.expanduser(first))
+    if path.startswith("/") or first.startswith(("./", "~")):
+        if not os.path.exists(path):
+            print(first)
+    elif first not in ("test", "echo", "cat", "sh", "bash", "python3") and not shutil.which(first):
+        print(first)
+PY
+)
+  if [[ -n $missing ]]; then
+    while IFS= read -r m; do warn "module command not found: $m"; done <<<"$missing"
+  else
+    ok "every module command resolves"
+  fi
+fi
+
+section "Theme"
+state=~/.local/state/cc/theme
+if [[ -f ~/.local/state/cc/theme.name && -f $state/colors.toml ]]; then
+  ok "current theme: $(cat ~/.local/state/cc/theme.name)"
+else
+  fail "no applied theme (run cc-theme-set <name>)"
+fi
+ls -1d ~/.local/state/cc/snapshots/*/ >/dev/null 2>&1 \
+  && ok "$(ls -1d ~/.local/state/cc/snapshots/*/ | wc -l) snapshot(s) for cc-theme-rollback" \
+  || warn "no theme snapshots yet"
+
+section "Per-app theme coverage"
+# app command : file the theme generates for it
+coverage="kitty:kitty.conf waybar:waybar.css walker:walker.css mako:mako.conf hyprlock:hyprlock.conf
+btop:btop.theme spf:superfile.toml zathura:zathurarc imv:imv.config
+qutebrowser:qutebrowser-theme.py swayosd-server:swayosd.css"
+for pair in $coverage; do
+  app=${pair%%:*}; file=${pair#*:}
+  if ! command -v "$app" >/dev/null 2>&1; then
+    (( quiet )) || printf '  -     %s (not installed)\n' "$app"
+  elif [[ -e $state/$file ]]; then
+    ok "$app themed ($file)"
+  else
+    warn "$app installed but the theme has no $file"
+  fi
+done
+
+section "Storage and tools"
+if findmnt -n /cloud >/dev/null 2>&1; then ok "/cloud (NAS) mounted"; else warn "/cloud (NAS) not mounted (cc-sync and cc-spf need it)"; fi
+grep -q 'transcript.sh' ~/.claude/settings.json 2>/dev/null && ok "transcript hook installed" || warn "transcript hook not in ~/.claude/settings.json"
+ls ~/.config/cc/waybar/scripts/*.sh >/dev/null 2>&1 && ok "fallback waybar helpers present" || warn "no fallback waybar helpers in ~/.config/cc/waybar/scripts"
+
+(( quiet )) || printf '\n%d fail, %d warn\n' "$fails" "$warns"
+(( fails == 0 ))

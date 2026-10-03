@@ -1,0 +1,6 @@
+[Unit]
+Description=Report Hyprland config errors (ChromaCon)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/cc-hypr-check

@@ -60,6 +60,7 @@ if ! cc-theme-set-templates "$NEXT_THEME_PATH"; then
   exit 1
 fi
 
+cc-theme-snapshot "$THEME_NAME" 2>/dev/null || true
 rm -rf "$CURRENT_THEME_PATH"
 mv "$NEXT_THEME_PATH" "$CURRENT_THEME_PATH"
 

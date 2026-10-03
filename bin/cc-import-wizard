@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Guided cc-import: type, then a GitHub URL (or local path), then an optional group.
+# Runs in a floating terminal from cc-menu.
+
+echo "Import into ChromaCon"
+echo
+echo "  waybar   bar style"
+echo "  walker   launcher style"
+echo "  theme    colour theme"
+echo
+read -rp "Type [waybar/walker/theme]: " kind
+case $kind in
+  waybar)  root="$HOME/.config/waybar/themes" ;;
+  walker)  root="$HOME/.config/walker/themes" ;;
+  theme)   root="$HOME/.config/cc/themes" ;;
+  *) echo "Unknown type: '$kind'"; exit 1 ;;
+esac
+
+read -rp "GitHub URL or local path: " src
+[[ -n $src ]] || { echo "Nothing to import."; exit 1; }
+
+# Existing groups are the folders in the target root that aren't styles themselves.
+groups=()
+for d in "$root"/*/; do
+  [[ -d $d ]] || continue
+  d=${d%/}
+  case $kind in
+    waybar) [[ -f $d/config.jsonc || -f $d/config ]] && continue ;;
+    walker) [[ -f $d/style.css ]] && continue ;;
+    theme)  [[ -f $d/colors.toml || -f $d/kitty.conf || -f $d/alacritty.toml ]] && continue ;;
+  esac
+  groups+=("$(basename "$d")")
+done
+if (( ${#groups[@]} )); then
+  echo "Existing groups: ${groups[*]}"
+fi
+read -rp "Group (blank for none): " group
+
+args=("$kind" "$src")
+if [[ -n $group ]]; then
+  [[ $group == */* || $group == .* ]] && { echo "Group can't contain '/' or start with '.'"; exit 1; }
+  args+=(--group "$group")
+fi
+
+echo
+cc-import "${args[@]}"

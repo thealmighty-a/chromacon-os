@@ -21,12 +21,24 @@ theme_menu() {
   [[ -n $theme ]] && cc-theme-set "$theme"
 }
 
+lock_profile_menu() {
+  local profile
+  profile=$(cc-lock-profile list | cc-dmenu "Lock profile") || return
+  [[ -n $profile ]] && run "cc-lock-profile $profile && echo 'Lock profile: $profile'"
+}
+
 style_menu() {
-  case $(menu "Style" "󰉼  Style manager" "󰏘  Quick theme switch" "󰸉  Next background" "󰍜  Toggle bar") in
+  case $(menu "Style" "󰉼  Style manager" "󰏘  Quick theme switch" "󰸉  Next background" "󰍜  Toggle bar" \
+    "󰍜  Waybar: bar / dock layout" "󰏔  Import from GitHub or a folder" \
+    "󰌾  Lock profile" "󰑓  Roll back theme") in
     *"Style manager") style_manager ;;
     *"Quick theme switch") theme_menu ;;
     *"Next background") cc-bg next ;;
     *"Toggle bar") cc-toggle bar ;;
+    *"bar / dock layout") cc-waybar-mode toggle ;;
+    *"Import from GitHub"*) run 'cc-import-wizard' ;;
+    *"Lock profile") lock_profile_menu ;;
+    *"Roll back theme") run 'cc-theme-rollback' ;;
   esac
 }
 
@@ -61,6 +73,8 @@ scripts_menu() {
     "󰏔  Apps: install everything on the list" \
     "󰚰  Update system" \
     "󰍂  Install login screen theme" \
+    "󰑓  Waybar: relink theme scripts" \
+    "󰚰  Health check (cc-doctor)" \
     "󰑓  Restart bar + launcher") in
     *"push this machine"*) run 'cc-sync push && notify-send -u low "cc-sync" "Pushed to the NAS"' ;;
     *"pull from the NAS"*) run 'cc-sync pull && notify-send -u low "cc-sync" "Pulled from the NAS"' ;;
@@ -70,6 +84,8 @@ scripts_menu() {
     *"install everything"*) run 'cc-install-packages' ;;
     *"Update system") run 'cc-update' ;;
     *"login screen theme") run 'cc-sddm-install' ;;
+    *"Health check"*) run 'cc-doctor' ;;
+    *"relink theme scripts") run 'cc-waybar-sync-scripts && cc-restart-waybar && notify-send -u low "Waybar" "Theme scripts relinked"' ;;
     *"Restart bar + launcher") cc-restart-waybar; cc-restart-walker ;;
   esac
 }

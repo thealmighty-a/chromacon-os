@@ -66,6 +66,16 @@ Starting from a fresh `archinstall` + base Hyprland:
      machine-specific tweaks (both optional, never shipped here)
    - reboot and pick "Hyprland (uwsm-managed)" at the login screen
 
+## Health, recovery and lock timing
+
+- `cc-doctor` checks the system: Hyprland config errors, the lock screen layout,
+  waybar links and module commands, services, per-app theme coverage. Exits 1 on failures.
+- `cc-theme-rollback` restores the look from before the last theme change
+  (`--dry-run` to preview, `list` to see snapshots). Snapshots are taken automatically.
+- `cc-lock-profile normal|long|never` sets idle lock and screen-off timing.
+- `cc-waybar-mode` toggles the bar/dock layout of whichever waybar theme is live.
+- Editing `hyprland.lua` triggers `cc-hypr-check`, which notifies on config errors.
+
 ## Design
 
 - **Theming**: `cc-theme-set <name>` renders `config/cc/templates/*.tpl`

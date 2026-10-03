@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Restore the look from the most recent snapshot (cc-theme-snapshot).
+#   cc-theme-rollback            restore the newest snapshot
+#   cc-theme-rollback list       list snapshots, newest first
+#   cc-theme-rollback --dry-run  show what would be restored
+# The current look is snapshotted first, so a rollback can itself be undone.
+set -u
+STATE="$HOME/.local/state/cc"
+SNAP_ROOT="$STATE/snapshots"
+
+mapfile -t snaps < <(ls -1dt "$SNAP_ROOT"/*/ 2>/dev/null)
+
+case ${1:-} in
+  list)
+    (( ${#snaps[@]} )) || { echo "No snapshots yet."; exit 0; }
+    for s in "${snaps[@]}"; do basename "$s"; done
+    exit 0 ;;
+esac
+
+(( ${#snaps[@]} )) || { echo "No snapshots to roll back to." >&2; exit 1; }
+snap=${snaps[0]%/}
+
+if [[ ${1:-} == --dry-run ]]; then
+  echo "Would restore: $(basename "$snap")"
+  echo "  theme: $(cat "$snap/theme.name" 2>/dev/null || echo '?')"
+  while IFS=$'\t' read -r link target; do echo "  link: $link -> $target"; done < "$snap/links"
+  exit 0
+fi
+
+cc-theme-snapshot pre-rollback
+
+theme=$(cat "$snap/theme.name" 2>/dev/null || true)
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/cc-theme-set.lock"
+flock 9
+rm -rf "$STATE/theme"
+cp -a "$snap/theme" "$STATE/theme"
+[[ -n $theme ]] && echo "$theme" > "$STATE/theme.name"
+flock -u 9
+
+while IFS=$'\t' read -r link target; do
+  # Relative targets are relative to the link's folder, as the theme manager writes them.
+  abs=$target; [[ $target == /* ]] || abs="$(dirname "$link")/$target"
+  [[ -e $abs ]] || { echo "skipped $link (target gone: $target)" >&2; continue; }
+  mkdir -p "$(dirname "$link")"
+  ln -sfn "$target" "$link"
+done < "$snap/links"
+
+if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+  cc-restart-hyprctl; cc-restart-waybar; cc-restart-mako; cc-restart-terminal; cc-restart-walker
+fi
+[[ -n $theme ]] && cc-hook theme-set "$theme"
+command -v notify-send >/dev/null && notify-send -u low -t 2500 "Theme rolled back" "${theme:-previous look} ($(basename "$snap"))"
+exit 0

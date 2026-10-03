@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Save the current look so cc-theme-rollback can restore it.
+#   cc-theme-snapshot [label]
+# cc-theme-set and the style manager call this before they change anything. Keeps the newest 10.
+set -u
+STATE="$HOME/.local/state/cc"
+SNAP_ROOT="$STATE/snapshots"
+KEEP=10
+label=${1:-manual}
+[[ -d $STATE/theme ]] || exit 0
+
+dir="$SNAP_ROOT/$(date +%Y%m%d-%H%M%S)-$label"
+mkdir -p "$dir"
+cp -a "$STATE/theme" "$dir/theme"
+[[ -f $STATE/theme.name ]] && cp -a "$STATE/theme.name" "$dir/theme.name"
+
+# Symlinks the theme manager points at (target recorded so rollback can re-link them)
+: > "$dir/links"
+for link in "$HOME/.config/waybar/config.jsonc" "$HOME/.config/waybar/style.css" \
+            "$HOME/.config/hypr/hyprlock.conf" "$HOME/.config/walker/config.toml"; do
+  [[ -L $link ]] && printf '%s\t%s\n' "$link" "$(readlink "$link")" >> "$dir/links"
+done
+
+ls -1dt "$SNAP_ROOT"/*/ 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -rf

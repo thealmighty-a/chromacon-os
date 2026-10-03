@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Expose the live waybar theme's helper files (window.sh, scripts/, *.py, ...)
+# at ~/.config/waybar/<name>, where theme configs expect them. Runs before
+# waybar starts (waybar.service drop-in), so switches, restarts and boots all
+# get it. Only touches links it made itself (listed in STATE); never replaces
+# a real file.
+
+shopt -s nullglob
+W="$HOME/.config/waybar"
+STATE="$W/.cc-script-links"
+live="$W/config.jsonc"
+
+# Previous run's links go first, so a theme switch leaves nothing stale.
+if [[ -f $STATE ]]; then
+  while IFS= read -r name; do
+    [[ -n $name && -L $W/$name ]] && rm -f "$W/$name"
+  done < "$STATE"
+fi
+: > "$STATE"
+
+# Live config is a link into the theme (configs/<mode>.jsonc or the theme's config.jsonc)
+[[ -L $live ]] || exit 0
+root=$(dirname "$(readlink -f "$live")")
+[[ $(basename "$root") == configs ]] && root=$(dirname "$root")
+
+# Theme-manager owns these; everything else at the theme root is a helper.
+skip=" config.jsonc style.css configs styles "
+for entry in "$root"/*; do
+  name=$(basename "$entry")
+  [[ $skip == *" $name "* ]] && continue
+  case $name in *.md|*.png|*.jpg|*.webp|*.gif) continue ;; esac
+  if [[ -e $W/$name && ! -L $W/$name ]]; then
+    echo "cc-waybar-sync-scripts: skipped $name (real file in $W)" >&2
+    continue
+  fi
+  ln -sfn "$entry" "$W/$name"
+  echo "$name" >> "$STATE"
+done
+
+# Fallback helpers (~/.config/cc/waybar/scripts) fill in scripts/ for themes that
+# call them but don't ship them. A theme that ships its own scripts/ wins.
+fallback="$HOME/.config/cc/waybar/scripts"
+if [[ ! -e $root/scripts && -d $fallback ]]; then
+  [[ -L $W/scripts ]] && rm -f "$W/scripts"
+  mkdir -p "$W/scripts"
+  for f in "$fallback"/*; do
+    n=$(basename "$f")
+    [[ -e $W/scripts/$n && ! -L $W/scripts/$n ]] && continue
+    ln -sfn "$f" "$W/scripts/$n"
+    echo "scripts/$n" >> "$STATE"
+  done
+  chmod u+x "$fallback"/*.sh 2>/dev/null
+fi
+
+# Linked scripts must be executable; the theme copies are local, so this sticks until a pull.
+find -L "$root" -maxdepth 2 -type f \( -name '*.sh' -o -name '*.py' \) -exec chmod u+x {} +

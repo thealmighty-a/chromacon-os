@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Runs after a Hyprland config save (cc-hypr-check.path): notify if Hyprland reports config errors.
+command -v hyprctl >/dev/null || exit 0
+errors=$(hyprctl configerrors 2>/dev/null)
+[[ -n $errors ]] || exit 0
+command -v notify-send >/dev/null && notify-send -u critical -t 8000 "Hyprland config error" "$(head -c 300 <<<"$errors")"
+echo "$errors" >&2
+exit 1

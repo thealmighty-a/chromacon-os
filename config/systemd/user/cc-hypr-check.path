@@ -1,0 +1,10 @@
+[Unit]
+Description=Check Hyprland config after saves (ChromaCon)
+
+[Path]
+PathChanged=%h/.config/hypr/hyprland.lua
+PathChanged=%h/.config/hypr/cc
+Unit=cc-hypr-check.service
+
+[Install]
+WantedBy=graphical-session.target

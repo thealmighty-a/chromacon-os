@@ -36,9 +36,13 @@ cp -f "$REPO_DIR"/config/hypr/cc/*.lua ~/.config/hypr/cc/
 rsync -a "$REPO_DIR/config/cc/templates/" ~/.config/cc/templates/
 rsync -a "$REPO_DIR/config/cc/hooks/" ~/.config/cc/hooks/
 rsync -a "$REPO_DIR/config/cc/sddm/" ~/.config/cc/sddm/
-cp -f "$REPO_DIR"/config/systemd/user/*.service ~/.config/systemd/user/
+rsync -a "$REPO_DIR/config/cc/waybar/" ~/.config/cc/waybar/
+rsync -a "$REPO_DIR/config/cc/lock-profiles/" ~/.config/cc/lock-profiles/
+cp -f "$REPO_DIR"/config/systemd/user/*.service "$REPO_DIR"/config/systemd/user/*.path ~/.config/systemd/user/
+mkdir -p ~/.config/systemd/user/waybar.service.d
+cp -f "$REPO_DIR"/config/systemd/user/waybar.service.d/*.conf ~/.config/systemd/user/waybar.service.d/
 cp -f "$REPO_DIR"/config/fontconfig/fonts.conf ~/.config/fontconfig/fonts.conf
-chmod +x ~/.config/cc/hooks/theme-set.d/* 2>/dev/null || true
+chmod +x ~/.config/cc/hooks/theme-set.d/* ~/.config/cc/waybar/scripts/*.sh 2>/dev/null || true
 
 # Monitors (per-machine, never shipped here) and local.lua (optional machine
 # tweaks) are left alone if present; Hyprland falls back cleanly without them.
@@ -55,6 +59,7 @@ systemctl --user daemon-reload
 systemctl --user mask dunst.service 2>/dev/null || true
 systemctl --user enable waybar.service mako.service hypridle.service hyprpolkitagent.service \
   cliphist.service elephant.service walker.service cc-bg.service cc-swayosd.service 2>/dev/null || true
+systemctl --user enable --now cc-hypr-check.path 2>/dev/null || true
 sudo systemctl enable --now swayosd-libinput-backend.service 2>/dev/null || true
 if ! systemctl is-enabled -q display-manager.service 2>/dev/null; then
   sudo systemctl enable sddm.service

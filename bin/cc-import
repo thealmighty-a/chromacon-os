@@ -25,6 +25,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 HOME = Path.home()
@@ -87,6 +88,7 @@ REWRITES = [
 ]
 
 TEXT_SUFFIXES = {".jsonc", ".json", ".css", ".sh", ".py", ".toml", ".xml", ".conf", ".ini", ".rasi", ""}
+URL = re.compile(r"^(https?://|git@)")
 LEFTOVER = re.compile(r"omarchy-[a-z][\w-]*|OMARCHY_PATH")
 
 
@@ -125,7 +127,38 @@ def convert_tree(src: Path, dest: Path, force: bool) -> list[str]:
     return notes
 
 
+def has_style(path: Path, kind: str) -> bool:
+    if (path / ("config.jsonc" if kind == "waybar" else "style.css")).is_file():
+        return True
+    return kind == "waybar" and (path / "config").is_file()
+
+
+def expand_urls(kind: str, sources: list[str], tmp: Path) -> list[str]:
+    """Clone git URLs into tmp; a repo that is one style imports whole, a collection imports each style folder."""
+    out = []
+    for source in sources:
+        if not URL.match(source):
+            out.append(source)
+            continue
+        repo = tmp / re.sub(r"\.git$", "", source.rstrip("/").split("/")[-1].split(":")[-1])
+        subprocess.run(["git", "clone", "--depth", "1", source, str(repo)], check=True)
+        shutil.rmtree(repo / ".git", ignore_errors=True)
+        if has_style(repo, kind):
+            out.append(str(repo))
+        else:
+            out += [str(p) for p in sorted(repo.iterdir()) if p.is_dir() and has_style(p, kind)]
+    return out
+
+
 def import_styles(kind: str, sources: list[str], dest_root: Path, group: str | None, force: bool) -> int:
+    tmp = Path(tempfile.mkdtemp(prefix="cc-import-"))
+    try:
+        return import_local(kind, expand_urls(kind, sources, tmp), dest_root, group, force)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def import_local(kind: str, sources: list[str], dest_root: Path, group: str | None, force: bool) -> int:
     marker = "config.jsonc" if kind == "waybar" else "style.css"
     target_root = dest_root / group if group else dest_root
     target_root.mkdir(parents=True, exist_ok=True)
